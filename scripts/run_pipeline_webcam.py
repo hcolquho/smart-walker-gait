@@ -84,7 +84,10 @@ def main():
                 skeleton2d = pose_estimator.estimate(frame.rgb, td, frame.timestamp)
                 for j, name in enumerate(JOINT_NAMES):
                     u, v = skeleton2d.keypoints[j]
-                    cv2.circle(bgr, (int(u), int(v)), 3, (0, 128, 255), -1)
+                    score = skeleton2d.scores[j]
+                    color = (0, 255, 0) if score > 0.5 else (0, 0, 255)  # green=confident, red=unsure
+                    cv2.circle(bgr, (int(u), int(v)), 3, color, -1)
+                    cv2.putText(bgr, f"{score:.2f}", (int(u)+4, int(v)), cv2.FONT_HERSHEY_PLAIN, 0.8, color, 1)
 
             cv2.imshow("Detector -> Tracker -> (mock) Pose2D", bgr)
             if cv2.waitKey(1) & 0xFF == ord("q"):
