@@ -1,0 +1,6 @@
+name: gait
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+prefix: C:\Anaconda\envs\gait
