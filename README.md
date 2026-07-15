@@ -35,6 +35,10 @@ smart_walker_gait/
 │   ├── tracking/
 │   │   ├── base.py
 │   │   └── iou_tracker.py            # IOU-based, adds track_id
+│   ├── detector/
+│   │   ├── base.py
+│   │   ├── dummy.py                  # `dummy` (fixed bbox) + `motion` (bg-subtraction) -- zero-dependency
+│   │   └── yolov8_backend.py         # real YOLOv8 -- stub, needs `pip install ultralytics`
 │   ├── pose2d/
 │   │   ├── base.py
 │   │   ├── dummy.py                  # zero-dependency mock, works today
@@ -65,13 +69,15 @@ smart_walker_gait/
     └── test_gait_metrics.py
 ```
 
-### Integrating your existing detector module
-Your existing YOLOv8-based detector (YAML config, ABC, factory pattern) is
-not redefined here — drop its `Detector` ABC + `yolov8` backend into
-`src/walker_gait/detector/` following the same `Registry` pattern used by
-every other stage (see `tracking/base.py` for the shortest example to copy).
-It should emit `core.types.Detection` objects; everything downstream (the
-tracker, in particular) already consumes that type.
+### Detector module
+Implemented in this repo now (`detector/base.py`, `detector/dummy.py`,
+`detector/yolov8_backend.py`) — `dummy` and `motion` work with zero extra
+dependencies today, `yolov8` needs `pip install ultralytics` (see
+requirements.txt for the note on why that's a heavier, separate install). If
+you already had a different YOLOv8 wrapper from earlier work, just swap its
+internals into `Yolov8Detector.detect()` — the `Detector` ABC / registry
+pattern and the `Detection` output type are what everything downstream
+depends on, not the specific class name.
 
 ---
 
@@ -96,6 +102,19 @@ end-to-end and prints computed gait metrics next to the ground-truth
 asymmetry that was deliberately injected, so you can sanity-check the whole
 chain at a glance.
 
+## Try the detector + tracker on your real webcam (no weights needed)
+
+```bash
+python scripts/run_pipeline_webcam.py --detector motion
+```
+
+Opens a window showing your webcam feed with the detector's bbox, the
+tracker's `track_id`, and mock 2D keypoints overlaid — press `q` to quit.
+`--detector motion` reacts to actual movement (background subtraction, zero
+ML weights); `--detector dummy` always boxes a fixed centered region. This is
+the fastest way to confirm the detector→tracker→pose2d wiring works on real
+video before YOLOv8 weights are downloaded.
+
 ---
 
 ## Tests to run, and what each one is actually checking
@@ -108,6 +127,7 @@ pytest tests/ -v
 | Test file | What it validates | Why it matters |
 |---|---|---|
 | `test_synthetic_source.py` | The synthetic ground-truth 2D projection exactly matches the pinhole projection of the ground-truth 3D skeleton; the depth channel matches ground-truth z at joint pixels; injecting `left_right_asymmetry` actually perturbs the leg trajectories. | **This is the harness every other test leans on.** If this is wrong, every other "validated against synthetic ground truth" test is meaningless. |
+| `test_detector.py` | `DummyDetector` returns a bbox that scales with frame size; `MotionDetector` reports nothing against a static background and correctly boxes an injected moving blob. | Confirms the detector stage's output contract (`Detection` bboxes) is sane before real YOLOv8 weights are in the loop — `MotionDetector` in particular is your first real-webcam sanity check. |
 | `test_tracker.py` | `track_id` persists across small bbox shifts; survives a brief (few-frame) occlusion; is correctly dropped and reassigned once occlusion exceeds `max_misses`. | Confirms the tracker does its one job — bridging brief detector dropouts — without silently merging or losing identity, which would corrupt every downstream per-joint trajectory. |
 | `test_backprojection.py` | Backprojection recovers ground-truth 3D position within tolerance on clean synthetic depth; a joint with zero valid depth is marked `invalid` rather than returning garbage coordinates; a single extreme noise-spike pixel doesn't corrupt the median-window estimate. | Depth accuracy is the piece most affected by real hardware — this is your regression baseline to re-run once the Femto Bolt's real depth is in the loop, to see how real noise compares to synthetic. |
 | `test_kalman_smoother.py` | Smoothed error is lower than raw measurement error under injected Gaussian noise; the filter coasts through a short occlusion using its velocity estimate; it correctly marks a joint invalid once occlusion exceeds the configured coast budget. | This is the **live-path** smoother — confirms it actually reduces noise (not just relabels it) and handles occlusion sanely without silently freezing or snapping to zero. |
@@ -140,9 +160,19 @@ then.
 
 2. **When you start developing against a live webcam** (already covered by
    `requirements.txt` via `opencv-python`) — no extra install needed,
-   `WebcamSource` and `VideoFileSource` work out of the box.
+   `WebcamSource`, `VideoFileSource`, `DummyDetector`, and `MotionDetector`
+   all work out of the box. Try
+   `python scripts/run_pipeline_webcam.py --detector motion` first.
 
-3. **When you want a simulated depth channel from RGB alone**
+3. **When you're ready to replace `dummy`/`motion` with real YOLOv8
+   detection** (`detector/yolov8_backend.py`):
+   ```bash
+   pip install ultralytics
+   ```
+   First run auto-downloads `yolov8n.pt` if not already present locally —
+   budget time/bandwidth, it pulls in torch as a dependency.
+
+4. **When you want a simulated depth channel from RGB alone**
    (`MonoDepthProxySource`, useful for exercising the backprojection code
    path before the Bolt arrives):
    ```bash
@@ -150,7 +180,7 @@ then.
    pip install transformers timm pillow
    ```
 
-4. **When you're ready to replace the dummy 2D pose estimator with RTMPose /
+5. **When you're ready to replace the dummy 2D pose estimator with RTMPose /
    ViTPose** (`pose2d/mmpose_backend.py`):
    ```bash
    pip install -U openmim
@@ -159,7 +189,7 @@ then.
    Then pick and download a checkpoint (see docstring in
    `mmpose_backend.py` for suggested starting model names).
 
-5. **When you're ready to wire up the Femto Bolt** (not implemented in this
+6. **When you're ready to wire up the Femto Bolt** (not implemented in this
    repo yet — you'll add `frame_source/femto_bolt.py`):
    ```bash
    # Orbbec SDK / pyorbbecsdk, per Orbbec's official install instructions
@@ -167,7 +197,7 @@ then.
    # comparison/cross-validation against your own pose pipeline)
    ```
 
-6. **When you're ready to add offline MotionBERT smoothing**
+7. **When you're ready to add offline MotionBERT smoothing**
    (`smoothing/motionbert_backend.py`):
    ```bash
    pip install torch torchvision
@@ -175,7 +205,7 @@ then.
    # download a pretrained checkpoint per their README
    ```
 
-7. **When the BNO085 IMU hardware is wired up** (`imu/bno085_backend.py`):
+8. **When the BNO085 IMU hardware is wired up** (`imu/bno085_backend.py`):
    ```bash
    pip install adafruit-circuitpython-bno08x adafruit-blinka
    ```
@@ -203,15 +233,17 @@ script, unchanged, against the Femto Bolt's RGB stream once it arrives.
 
 1. Done in this repo: `SyntheticSource` + calibration script
 2. Done in this repo: `IouTracker`
-3. Done in this repo: `DepthBackprojector` (tested against synthetic ground truth)
-4. Done in this repo: `KalmanSkeletonSmoother` (tested against injected noise)
-5. Done in this repo: `VerticalVelocityEventDetector` + `GaitMetricsCalculator`
-6. Wire in your existing YOLOv8 detector module (see note above)
-7. Install `mmpose`, swap `pose2d` backend from `dummy` to `rtmpose`, validate
+3. Done in this repo: `Detector` (`dummy`/`motion` today, `yolov8` stubbed)
+4. Done in this repo: `DepthBackprojector` (tested against synthetic ground truth)
+5. Done in this repo: `KalmanSkeletonSmoother` (tested against injected noise)
+6. Done in this repo: `VerticalVelocityEventDetector` + `GaitMetricsCalculator`
+7. Install `ultralytics`, swap `detector` backend from `dummy`/`motion` to
+   `yolov8`, validate against `scripts/run_pipeline_webcam.py`
+8. Install `mmpose`, swap `pose2d` backend from `dummy` to `rtmpose`, validate
    on real webcam footage against manually-annotated heel-strike frames
-8. Wire BNO085 `ImuSource`, add independent event cross-check
-9. Start MotionBERT integration against public 3D pose datasets (Human3.6M
-   format) while waiting on the Bolt
-10. When the Bolt arrives: implement `FemtoBoltSource`, re-run calibration,
+9. Wire BNO085 `ImuSource`, add independent event cross-check
+10. Start MotionBERT integration against public 3D pose datasets (Human3.6M
+    format) while waiting on the Bolt
+11. When the Bolt arrives: implement `FemtoBoltSource`, re-run calibration,
     drop in real intrinsics — this should be close to a same-day integration
     since nothing upstream or downstream needs to change.

@@ -31,14 +31,15 @@ frame_source:
     params: {}
 
 detector:
-  # Han's existing YOLOv8-based detector module plugs in here unchanged --
-  # this repo does not redefine it, see README "Integrating your existing
-  # detector module".
+  # dummy (fixed centered box, for synthetic testing) | motion (background-
+  # subtraction blob, for real webcam testing w/o weights) | yolov8 (real,
+  # needs `pip install ultralytics` -- see detector/yolov8_backend.py)
   backend: yolov8
   params:
     weights: models/yolov8n.pt
     conf_threshold: 0.4
     person_class_id: 0
+    single_person_mode: true
 
 tracker:
   backend: iou

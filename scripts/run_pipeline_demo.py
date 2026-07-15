@@ -14,6 +14,7 @@ import numpy as np
 
 from walker_gait.frame_source.synthetic import SyntheticSource
 from walker_gait.core.types import Detection, TrackedDetection, Skeleton2D, NUM_JOINTS
+from walker_gait.detector.dummy import DummyDetector
 from walker_gait.tracking.iou_tracker import IouTracker
 from walker_gait.depth.backprojection import DepthBackprojector
 from walker_gait.smoothing.kalman import KalmanSkeletonSmoother
@@ -26,6 +27,7 @@ def main():
 
     src = SyntheticSource(fps=30.0, duration_s=8.0, cadence_steps_per_min=100.0,
                            left_right_asymmetry=0.2, noise_std_px=1.5)
+    detector = DummyDetector()  # swap to Yolov8Detector once ultralytics + weights are ready
     tracker = IouTracker()
     backprojector = DepthBackprojector(window=5)
     smoother = KalmanSkeletonSmoother(dt=1 / 30.0)
@@ -34,13 +36,16 @@ def main():
     smoothed_skeletons = []
 
     for frame in src:
-        # --- Detection stage stand-in: synthetic person always centered ---
-        # (In the real pipeline this comes from your existing YOLOv8 detector.)
-        h, w = frame.rgb.shape[:2]
-        detection = Detection(bbox=(w * 0.25, h * 0.05, w * 0.75, h * 0.98), confidence=0.95)
+        # --- Detection ---
+        # (SyntheticSource always centers its person, so DummyDetector's
+        # fixed centered bbox is a faithful stand-in here; on real webcam
+        # frames, swap DummyDetector for MotionDetector or Yolov8Detector.)
+        detections = detector.detect(frame.rgb)
+        if not detections:
+            continue
 
         # --- Tracking ---
-        tracked = tracker.update([detection], timestamp=frame.timestamp)
+        tracked = tracker.update(detections, timestamp=frame.timestamp)
         if not tracked:
             continue
         td: TrackedDetection = tracked[0]
