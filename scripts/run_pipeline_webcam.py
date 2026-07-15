@@ -37,20 +37,35 @@ def build_detector(name: str):
         return DummyDetector()
     if name == "motion":
         return MotionDetector()
-    raise ValueError(f"Unknown detector '{name}'. Use 'dummy' or 'motion' "
-                      f"(add 'yolov8' yourself once ultralytics is installed).")
+    if name == "yolov8":
+        from walker_gait.detector.yolov8_backend import Yolov8Detector
+        return Yolov8Detector(weights="yolov8n.pt")
+    raise ValueError(f"Unknown detector '{name}'. Use 'dummy', 'motion', or 'yolov8'.")
+
+def build_pose_estimator(name: str):
+    if name == "dummy":
+        return DummyPoseEstimator2D()
+    if name == "rtmpose":
+        from walker_gait.pose2d.mmpose_backend import RTMPoseEstimator
+        return RTMPoseEstimator(
+            config_path="models/rtmpose-m_8xb256-420e_coco-256x192.py",
+            checkpoint_path="models/rtmpose-m_simcc-coco_pt-aic-coco_420e-256x192-d8dd5ca4_20230127.pth",
+            device="cpu",
+        )
+    raise ValueError(f"Unknown pose2d backend '{name}'")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--detector", default="motion", choices=["dummy", "motion"])
+    parser.add_argument("--detector", default="motion", choices=["dummy", "motion", "yolov8"])
     parser.add_argument("--camera-index", type=int, default=0)
+    parser.add_argument("--pose2d", default="dummy", choices=["dummy", "rtmpose"])
     args = parser.parse_args()
 
     src = WebcamSource(device_index=args.camera_index)
     detector = build_detector(args.detector)
     tracker = IouTracker()
-    pose_estimator = DummyPoseEstimator2D()
+    pose_estimator = build_pose_estimator(args.pose2d)
 
     print("Press 'q' to quit.")
     try:

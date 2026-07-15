@@ -42,8 +42,10 @@ def _register_backend(key: str):
 
         def estimate(self, rgb: np.ndarray, detection: TrackedDetection, timestamp: float) -> Skeleton2D:
             from mmpose.apis import inference_topdown
+            import cv2
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)  # mmpose/mmcv expect BGR (OpenCV convention)
             bbox = np.array([detection.bbox], dtype=np.float32)
-            results = inference_topdown(self.model, rgb, bboxes=bbox, bbox_format="xyxy")
+            results = inference_topdown(self.model, bgr, bboxes=bbox, bbox_format="xyxy")
 
             keypoints = np.zeros((NUM_JOINTS, 2), dtype=np.float32)
             scores = np.zeros((NUM_JOINTS,), dtype=np.float32)
