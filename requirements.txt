@@ -1,0 +1,23 @@
+# Core dependencies -- needed to run the pipeline with synthetic/mock/webcam
+# backends and pass the test suite. Kept deliberately minimal.
+numpy>=1.24
+opencv-python>=4.8
+pyyaml>=6.0
+pytest>=7.4
+
+# --- Optional, install only when you're ready for that stage's real backend ---
+#
+# 2D pose (RTMPose / ViTPose) -- see src/walker_gait/pose2d/mmpose_backend.py
+#   pip install -U openmim
+#   mim install mmengine "mmcv>=2.0.1" mmpose mmdet
+#
+# Monocular depth proxy -- see src/walker_gait/frame_source/mono_depth_proxy.py
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install transformers timm pillow
+#
+# MotionBERT (offline smoothing) -- see src/walker_gait/smoothing/motionbert_backend.py
+#   pip install torch torchvision
+#   git clone https://github.com/Walter0807/MotionBERT
+#
+# BNO085 IMU -- see src/walker_gait/imu/bno085_backend.py
+#   pip install adafruit-circuitpython-bno08x adafruit-blinka

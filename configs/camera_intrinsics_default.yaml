@@ -1,0 +1,12 @@
+# Placeholder intrinsics -- rough numbers only, DO NOT use for real metric
+# gait analysis. Replace by running:
+#   python -m walker_gait.calibration.calibrate_camera --images "calib/*.jpg" --out configs/camera_intrinsics_measured.yaml
+# once you have checkerboard photos from your actual camera (webcam now,
+# Femto Bolt RGB stream later -- same script, same procedure, either time).
+fx: 525.0
+fy: 525.0
+cx: 320.0
+cy: 240.0
+depth_scale: 1.0
+width: 640
+height: 480

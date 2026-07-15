@@ -1,0 +1,86 @@
+# Master pipeline configuration. Every stage is built via its Registry.build()
+# from the "backend" name below -- swap backends here without touching code.
+#
+# Two ready-to-run profiles are shown: `dev_synthetic` (works today, no
+# hardware/ML deps) and `live_webcam` (needs a webcam + your existing YOLOv8
+# detector wired in). Femto Bolt profile is left as a documented placeholder
+# for when the hardware arrives.
+
+profile: dev_synthetic  # dev_synthetic | live_webcam | femto_bolt (not yet implemented)
+
+frame_source:
+  dev_synthetic:
+    backend: synthetic
+    params:
+      fps: 30.0
+      duration_s: 10.0
+      cadence_steps_per_min: 100.0
+      camera_distance_m: 1.8
+      noise_std_px: 1.5
+      depth_noise_std_m: 0.01
+      left_right_asymmetry: 0.15   # deliberate injected limp, for validating asymmetry metrics
+  live_webcam:
+    backend: webcam
+    params:
+      device_index: 0
+      width: 1280
+      height: 720
+      intrinsics: null  # fill in from configs/camera_intrinsics_measured.yaml once calibrated
+  femto_bolt:
+    backend: femto_bolt   # TODO: implement FemtoBoltSource wrapping the Orbbec SDK
+    params: {}
+
+detector:
+  # Han's existing YOLOv8-based detector module plugs in here unchanged --
+  # this repo does not redefine it, see README "Integrating your existing
+  # detector module".
+  backend: yolov8
+  params:
+    weights: models/yolov8n.pt
+    conf_threshold: 0.4
+    person_class_id: 0
+
+tracker:
+  backend: iou
+  params:
+    iou_threshold: 0.3
+    max_misses: 15
+
+pose2d:
+  live:
+    backend: dummy     # swap to `rtmpose` once mmpose is installed and a checkpoint chosen
+    params:
+      jitter_px: 2.0
+  offline:
+    backend: dummy      # swap to `vitpose` for offline high-fidelity re-processing
+    params: {}
+
+depth:
+  window: 5
+  min_valid_fraction: 0.3
+  max_depth_m: 6.0
+  min_depth_m: 0.2
+
+smoothing:
+  live:
+    backend: kalman
+    params:
+      dt: 0.0333
+      process_noise: 0.01
+      measurement_noise: 0.02
+      coast_frames_max: 10
+  offline:
+    backend: motionbert  # not wired to a checkpoint yet, see smoothing/motionbert_backend.py
+    params:
+      checkpoint_path: models/motionbert_h36m.bin
+      window_frames: 243
+      device: cuda
+
+imu:
+  backend: dummy   # switch to `bno085` once hardware is wired up
+  params: {}
+
+gait:
+  event_detector:
+    fps: 30.0
+    min_event_spacing_s: 0.25

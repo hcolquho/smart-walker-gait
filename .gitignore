@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+models/*.pt
+models/*.bin
+models/*.pth
+configs/camera_intrinsics_measured.yaml
+calib_images/
+*.mp4
+*.avi
+.DS_Store
